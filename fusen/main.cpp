@@ -30,14 +30,6 @@ int main(int argc, char *argv[]) {
     return app.exec();
 }
 
-static int entry_callback(void *data, int argc, char **argv, char **azColName) {
-    QStringList *entries = static_cast<QStringList *>(data);
-    for (int i = 0; i < argc; i++) {
-        *entries << argv[i];
-    }
-    return 0;
-}
-
 static int col_callback(void *data, int argc, char **argv, char **azColName) {
     QSet<QString> *columns = static_cast<QSet<QString> *>(data);
     for (int i = 0; i < argc; i++) {
@@ -48,14 +40,23 @@ static int col_callback(void *data, int argc, char **argv, char **azColName) {
     return 0;
 }
 
+static int entry_callback(void *data, int argc, char **argv, char **azColName) {
+    QSet<QString> *entries = static_cast<QSet<QString> *>(data);
+    for (int i = 0; i < argc; i++) {
+        entries->insert(argv[i]);
+    }
+    return 0;
+}
+
 static QStringList build_entries(sqlite3 *database) {
-    QStringList entries;
+    QSet<QString> entries;
     std::string sql = std::string("SELECT ") + PRIMARY_KEY + std::string(" FROM ") + TABLE;
     char *err;
     if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&entries), &err)) {
         std::cerr << "Error while trying to read table: " << err << std::endl;
     }
-    return entries;
+    QStringList list(entries.begin(), entries.end());
+    return list;
 }
 
 static sqlite3 *connectDatabase() {
@@ -269,12 +270,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 }
 
 void MainWindow::addDirectory() {
+    char *err;
+    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
+    QSet<QString> existing_files;
+    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&existing_files), &err)) {
+        std::cerr << "Error while reading database: " << err << std::endl;
+        return;
+    }
+
     QStringList filenames;
     QString directory = QFileDialog::getExistingDirectory(this, "Add Directory");
     if (!directory.isEmpty()) {
         fs::path path = fs::path(directory.toStdString());
         for (auto& p: fs::directory_iterator(path)) {
-            if (p.is_regular_file()) {
+            if (p.is_regular_file() and !existing_files.contains(p.path().string().c_str())) {
                 filenames.append(p.path().string().c_str());
             }
         }
@@ -289,9 +298,24 @@ void MainWindow::addDirectory() {
 }
 
 void MainWindow::addFiles() {
+    char *err;
+    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
+    QSet<QString> existing_files;
+    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&existing_files), &err)) {
+        std::cerr << "Error while reading database: " << err << std::endl;
+        return;
+    }
+
     QStringList filenames = QFileDialog::getOpenFileNames(this, "Add Files");
-    if (!filenames.isEmpty()) {
-        QStringList new_entries = sql_insert_into(database, std::string(PRIMARY_KEY), filenames);
+    QStringList filtered_filenames;
+    for (int i = 0; i < filenames.size(); ++i) {
+        if (!existing_files.contains(filenames.at(i))) {
+            filenames.append(filenames.at(i));
+        }
+    }
+
+    if (!filtered_filenames.isEmpty()) {
+        QStringList new_entries = sql_insert_into(database, std::string(PRIMARY_KEY), filtered_filenames);
         if (!new_entries.isEmpty()) {
             entries += new_entries;
             model->setStringList(entries);
@@ -347,7 +371,7 @@ void MainWindow::tagFiles() {
 
 void MainWindow::updateEntries(const QString str) {
     char *err;
-    QStringList filtered_entries;
+    QSet<QString> filtered_entries;
     QStringList tags = splitTags(str.toStdString(), ',');
     std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE + " WHERE ";
 
@@ -375,7 +399,8 @@ void MainWindow::updateEntries(const QString str) {
     sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&filtered_entries), &err);
 
 done:
-    model->setStringList(filtered_entries);
+    QStringList filtered_list(filtered_entries.begin(), filtered_entries.end());
+    model->setStringList(filtered_list);
 }
 
 void MainWindow::updateTags(bool add) {
