@@ -21,7 +21,8 @@ Currently, opening files is hard coded to use mpv. In the future, this will be c
 In the dialog, you can add any number of files or directories to the database. In the list, you can right-click
 any number of files and select `Tag` to add or remove them. In the box, tags are comma-delineated which means
 commas are not allowed as a possible tag name. Additionally, ` `, `'`, and `"` are all automatically converted
-to `_` internally for simplicity. That means that, in practice, `foo bar` and `foo_bar` should be the same.
+to `_` internally for simplicity. That means that, in practice, `foo bar` and `foo_bar` should be the same. Finally,
+`path` is a reserved name and is silently ignored if entered. Tags are case insensitive.
 
 ## Filtering
 In the search box at, tags can be searched for matches and update the list of entries. Multiple tags are
