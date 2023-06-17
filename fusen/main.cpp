@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <pwd.h>
 #include <QApplication>
@@ -12,6 +13,7 @@
 #include <QPushButton>
 #include <QSet>
 #include <QStringListModel>
+#include <yaml-cpp/yaml.h>
 #include <unistd.h>
 
 #include "mainwindow.h"
@@ -20,6 +22,7 @@
 #define PRIMARY_KEY "path"
 
 namespace fs = std::filesystem;
+static fs::path getUserFile(const char *type);
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
@@ -61,16 +64,9 @@ static QStringList build_entries(sqlite3 *database) {
 }
 
 static sqlite3 *connectDatabase() {
-    const char *homedir;
+    fs::path file = getUserFile("data");
+
     bool create_table = false;
-    if ((homedir = getenv("HOME")) == NULL) {
-        homedir = getpwuid(getuid())->pw_dir;
-    }
-    if (homedir == NULL) {
-        std::cerr << "Couldn't locate the user's home directory. Exiting!" << std::endl;
-        exit(EXIT_FAILURE);
-    }
-    fs::path file = fs::path(homedir) / ".local" / "share" / "fusen" / "data.sqlite";
     if (!fs::exists(file)) {
         create_table = true;
         fs::create_directories(file.parent_path());
@@ -104,6 +100,39 @@ static QStringList getSelectedFiles(QListView *listView) {
     return list;
 }
 
+static fs::path getUserFile(const char *type) {
+    const char *homedir;
+    const char *filename = NULL;
+    if (strcmp(type, "data") == 0) {
+        filename = "data.sqlite";
+    } else if (strcmp(type, "settings") == 0) {
+        filename = "settings.yaml";
+    }
+
+    assert(filename && filename[0]);
+
+    if ((homedir = getenv("HOME")) == NULL) {
+        homedir = getpwuid(getuid())->pw_dir;
+    }
+    if (homedir == NULL) {
+        std::cerr << "Couldn't locate the user's home directory. Exiting!" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    fs::path file = fs::path(homedir) / ".local" / "share" / "fusen" / filename;
+
+    return file;
+}
+
+static void initializeSettings(mainSettings *settings) {
+    fs::path file = getUserFile("settings");
+    if (!fs::exists(file)) {
+        fs::create_directories(file.parent_path());
+    }
+
+    YAML::Node yaml = YAML::LoadFile(file.string().c_str());
+    settings->importSettings->setChecked(yaml["importOverwrite"].as<bool>());
+}
+
 std::string sanitize_tags(std::string str) {
     // Replace some special characters and other nonsense for sanity
     // An sql injection is probably still possible but whatever don't make drop table a tag
@@ -111,6 +140,16 @@ std::string sanitize_tags(std::string str) {
     std::replace(str.begin(), str.end(), '\'', '_');
     std::replace(str.begin(), str.end(), '"', '_');
     return str;
+}
+
+static void saveSettings(mainSettings *settings) {
+    YAML::Node yaml;
+    yaml["importOverwrite"] = settings->importSettings->isChecked();
+
+    fs::path file = getUserFile("settings");
+    std::ofstream fout(file.string().c_str());
+    fout << yaml;
+    fout.close();
 }
 
 static QStringList splitTags(std::string str, char delimeter) {
@@ -222,21 +261,31 @@ static QStringList sql_insert_into(sqlite3 *database, std::string key, QStringLi
 }
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+    settings = new mainSettings;
     database = connectDatabase();
 
-    QMenu *menu = menuBar()->addMenu(tr("&File"));
+    QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
 
     QAction *addFiles = new QAction(tr("&Add Files"), this);
     connect(addFiles, &QAction::triggered, this, &MainWindow::addFiles);
-    menu->addAction(addFiles);
+    fileMenu->addAction(addFiles);
 
     QAction *addDirectory = new QAction(tr("&Add Directory"), this);
     connect(addDirectory, &QAction::triggered, this, [this]{MainWindow::addDirectory(false);});
-    menu->addAction(addDirectory);
+    fileMenu->addAction(addDirectory);
 
     QAction *addRecursiveDirectory = new QAction(tr("&Add Directory Recursively"), this);
     connect(addRecursiveDirectory, &QAction::triggered, this, [this]{MainWindow::addDirectory(true);});
-    menu->addAction(addRecursiveDirectory);
+    fileMenu->addAction(addRecursiveDirectory);
+
+    QMenu *settingsMenu = menuBar()->addMenu(tr("&Settings"));
+
+    importSettings = new QAction(tr("&Overwrite Database on Import"), this);
+    importSettings->setCheckable(true);
+    settingsMenu->addAction(importSettings);
+    settings->importSettings = importSettings;
+
+    initializeSettings(settings);
 
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
@@ -343,6 +392,8 @@ void MainWindow::addFiles() {
 
 void MainWindow::closeEvent(QCloseEvent *event) {
     sqlite3_close(database);
+    saveSettings(settings);
+    delete settings;
 }
 
 void MainWindow::openFiles() {

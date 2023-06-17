@@ -5,11 +5,17 @@
 #include <QMainWindow>
 #include <sqlite3.h>
 
+struct mainSettings {
+	QAction *importSettings;
+};
+
 class MainWindow : public QMainWindow {
 	public:
 		explicit MainWindow(QWidget *parent = 0);
+		mainSettings *settings;
 		sqlite3 *database;
 		QStringList entries;
+		QAction *importSettings;
 		QListView *listView;
 		QStringListModel *model;
 		QLineEdit *searchBox;

@@ -8,6 +8,7 @@ dependencies += dependency('Qt6Core')
 dependencies += dependency('Qt6Gui')
 dependencies += dependency('Qt6Widgets')
 dependencies += dependency('sqlite3')
+dependencies += dependency('yaml-cpp')
 
 sources = files('fusen/main.cpp')
 inc =  include_directories('include')
