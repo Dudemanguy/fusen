@@ -410,7 +410,8 @@ void MainWindow::updateEntries(const QString str) {
 
 done:
     QStringList filtered_list(filtered_entries.begin(), filtered_entries.end());
-    model->setStringList(filtered_list);
+    entries = filtered_list;
+    model->setStringList(entries);
 }
 
 void MainWindow::updateTags(bool add) {
