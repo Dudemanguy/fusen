@@ -243,6 +243,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     entries = build_entries(database);
     model = new QStringListModel(this);
+    entries.sort();
     model->setStringList(entries);
 
     searchBox = new QLineEdit(this);
@@ -307,6 +308,7 @@ void MainWindow::addDirectory(bool recursive) {
         QStringList new_entries = sql_insert_into(database, std::string(PRIMARY_KEY), filenames);
         if (!new_entries.isEmpty()) {
             entries += new_entries;
+            entries.sort();
             model->setStringList(entries);
         }
     }
@@ -333,6 +335,7 @@ void MainWindow::addFiles() {
         QStringList new_entries = sql_insert_into(database, std::string(PRIMARY_KEY), filtered_filenames);
         if (!new_entries.isEmpty()) {
             entries += new_entries;
+            entries.sort();
             model->setStringList(entries);
         }
     }
@@ -360,6 +363,7 @@ void MainWindow::removeFiles() {
             for (int i = 0; i < old_entries.size(); ++i) {
                 entries.removeOne(old_entries.at(i));
             }
+            entries.sort();
             model->setStringList(entries);
         }
     }
@@ -429,6 +433,7 @@ void MainWindow::updateEntries(const QString str) {
 done:
     QStringList filtered_list(filtered_entries.begin(), filtered_entries.end());
     entries = filtered_list;
+    entries.sort();
     model->setStringList(entries);
 }
 
