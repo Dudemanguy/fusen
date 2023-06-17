@@ -8,12 +8,14 @@
 class MainWindow : public QMainWindow {
 	public:
 		explicit MainWindow(QWidget *parent = 0);
-		QLineEdit *tagEdit;
-		QListView *listView;
-		QStringList entries;
-		QStringListModel *model;
-		QDialog *tagDialog;
 		sqlite3 *database;
+		QStringList entries;
+		QListView *listView;
+		QStringListModel *model;
+		QLineEdit *searchBox;
+		QCheckBox *searchNames;
+		QDialog *tagDialog;
+		QLineEdit *tagEdit;
 	private slots:
 		void addDirectory(bool recursive);
 		void addFiles();
@@ -22,6 +24,7 @@ class MainWindow : public QMainWindow {
 		void removeFiles();
 		void tagFiles();
 		void updateEntries(const QString str);
+		void updateNameCheck(bool checked);
 		void updateTags(bool add);
 };
 

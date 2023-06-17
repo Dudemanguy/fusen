@@ -3,6 +3,7 @@
 #include <iostream>
 #include <pwd.h>
 #include <QApplication>
+#include <QCheckBox>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QLabel>
@@ -244,10 +245,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     model = new QStringListModel(this);
     model->setStringList(entries);
 
-    QLineEdit *searchBox = new QLineEdit(this);
+    searchBox = new QLineEdit(this);
     searchBox->setClearButtonEnabled(true);
-    searchBox->setPlaceholderText(tr("Filter tag names"));
+    searchBox->setPlaceholderText(tr("Search"));
     connect(searchBox, &QLineEdit::textChanged, this, &MainWindow::updateEntries);
+
+    searchNames = new QCheckBox("Filter by name", this);
+    connect(searchNames, &QCheckBox::stateChanged, this, &MainWindow::updateNameCheck);
 
     listView = new QListView(this);
     listView->setModel(model);
@@ -268,6 +272,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     QGridLayout *mainLayout = new QGridLayout(centralWidget);
     mainLayout->addWidget(searchBox, 0, 0, 1, 1);
+    mainLayout->addWidget(searchNames, 0, 1, Qt::AlignLeft);
     mainLayout->addWidget(listView, 1, 0, 1, 3);
 }
 
@@ -382,10 +387,22 @@ void MainWindow::tagFiles() {
 void MainWindow::updateEntries(const QString str) {
     char *err;
     QSet<QString> filtered_entries;
-    QStringList tags = splitTags(str.toStdString(), ',');
-    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE + " WHERE ";
+    QSet<QString> columns;
+    QStringList tags;
+    std::string sql;
 
-    QSet<QString> columns = sql_get_columns(database);
+    if (searchNames->isChecked()) {
+        entries = build_entries(database);
+        for (int i = 0; i < entries.size(); ++i) {
+            if (entries.at(i).toLower().contains(str.toLower())) {
+                filtered_entries.insert(entries.at(i));
+            }
+        }
+        goto done;
+    }
+
+    columns = sql_get_columns(database);
+    tags = splitTags(str.toStdString(), ',');
     for (int i = 0; i < tags.size(); ++i) {
         std::string tag = tags.at(i).toLower().toStdString();
         if (tags.at(i)[0] == '-') {
@@ -396,6 +413,7 @@ void MainWindow::updateEntries(const QString str) {
         }
     }
 
+    sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE + " WHERE ";
     for (int i = 0; i < tags.size(); ++i) {
         std::string tag = tags.at(i).toStdString();
         std::string include = " NOT ";
@@ -412,6 +430,10 @@ done:
     QStringList filtered_list(filtered_entries.begin(), filtered_entries.end());
     entries = filtered_list;
     model->setStringList(entries);
+}
+
+void MainWindow::updateNameCheck(bool checked) {
+    MainWindow::updateEntries(searchBox->text());
 }
 
 void MainWindow::updateTags(bool add) {
