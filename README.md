@@ -6,11 +6,12 @@ You will need the following dependencies.
 
 * Qt6
 * sqlite3
-* meson (building)
+* yaml-cpp
+* meson (makedep)
 
 After checking out the source, navigate to the directory, and then simply run.
 ```
-meson build
+meson setup build -Dprefix=/usr
 meson compile -C build
 sudo meson install -C build
 ```
