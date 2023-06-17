@@ -353,9 +353,9 @@ void MainWindow::updateEntries(const QString str) {
 
     QSet<QString> columns = sql_get_columns(database);
     for (int i = 0; i < tags.size(); ++i) {
-        std::string tag = tags.at(i).toStdString();
+        std::string tag = tags.at(i).toLower().toStdString();
         if (tags.at(i)[0] == '-') {
-            tag = tags.at(i).mid(1).toStdString();
+            tag = tags.at(i).mid(1).toLower().toStdString();
         }
         if (!columns.contains(tag.c_str())) {
             goto done;
@@ -385,8 +385,8 @@ void MainWindow::updateTags(bool add) {
     QStringList new_columns;
     QSet<QString> columns = sql_get_columns(database);
     for (int i = 0; i < tags.size(); ++i) {
-        if (!columns.contains(tags[i])) {
-            new_columns.append(tags[i]);
+        if (!columns.contains(tags[i].toLower())) {
+            new_columns.append(tags[i].toLower());
         }
     }
     if (!columns.isEmpty()) {
