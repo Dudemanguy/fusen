@@ -232,8 +232,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     QAction *addDirectory = new QAction(tr("&Add Directory"), this);
     addDirectory->setStatusTip(tr("Add Directory"));
-    connect(addDirectory, &QAction::triggered, this, &MainWindow::addDirectory);
+    connect(addDirectory, &QAction::triggered, this, [this]{MainWindow::addDirectory(false);});
     menu->addAction(addDirectory);
+
+    QAction *addRecursiveDirectory = new QAction(tr("&Add Directory Recursively"), this);
+    addRecursiveDirectory->setStatusTip(tr("Add Directory Recursively"));
+    connect(addRecursiveDirectory, &QAction::triggered, this, [this]{MainWindow::addDirectory(true);});
+    menu->addAction(addRecursiveDirectory);
 
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
@@ -269,7 +274,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     mainLayout->addWidget(listView, 1, 0, 1, 3);
 }
 
-void MainWindow::addDirectory() {
+void MainWindow::addDirectory(bool recursive) {
     char *err;
     std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
     QSet<QString> existing_files;
@@ -282,9 +287,17 @@ void MainWindow::addDirectory() {
     QString directory = QFileDialog::getExistingDirectory(this, "Add Directory");
     if (!directory.isEmpty()) {
         fs::path path = fs::path(directory.toStdString());
-        for (auto& p: fs::directory_iterator(path)) {
-            if (p.is_regular_file() and !existing_files.contains(p.path().string().c_str())) {
-                filenames.append(p.path().string().c_str());
+        if (recursive) {
+            for (auto& p: fs::recursive_directory_iterator(path)) {
+                if (p.is_regular_file() and !existing_files.contains(p.path().string().c_str())) {
+                    filenames.append(p.path().string().c_str());
+                }
+            }
+        } else {
+            for (auto& p: fs::directory_iterator(path)) {
+                if (p.is_regular_file() and !existing_files.contains(p.path().string().c_str())) {
+                    filenames.append(p.path().string().c_str());
+                }
             }
         }
     }

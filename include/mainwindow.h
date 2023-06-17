@@ -15,7 +15,7 @@ class MainWindow : public QMainWindow {
 		QDialog *tagDialog;
 		sqlite3 *database;
 	private slots:
-		void addDirectory();
+		void addDirectory(bool recursive);
 		void addFiles();
 		void closeEvent(QCloseEvent *event);
 		void openFiles();
