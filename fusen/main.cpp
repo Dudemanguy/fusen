@@ -226,17 +226,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QMenu *menu = menuBar()->addMenu(tr("&File"));
 
     QAction *addFiles = new QAction(tr("&Add Files"), this);
-    addFiles->setStatusTip(tr("Add Files"));
     connect(addFiles, &QAction::triggered, this, &MainWindow::addFiles);
     menu->addAction(addFiles);
 
     QAction *addDirectory = new QAction(tr("&Add Directory"), this);
-    addDirectory->setStatusTip(tr("Add Directory"));
     connect(addDirectory, &QAction::triggered, this, [this]{MainWindow::addDirectory(false);});
     menu->addAction(addDirectory);
 
     QAction *addRecursiveDirectory = new QAction(tr("&Add Directory Recursively"), this);
-    addRecursiveDirectory->setStatusTip(tr("Add Directory Recursively"));
     connect(addRecursiveDirectory, &QAction::triggered, this, [this]{MainWindow::addDirectory(true);});
     menu->addAction(addRecursiveDirectory);
 
