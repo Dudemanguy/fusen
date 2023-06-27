@@ -418,7 +418,7 @@ void MainWindow::addFiles() {
     QStringList filtered_filenames;
     for (int i = 0; i < filenames.size(); ++i) {
         if (!existing_files.contains(filenames.at(i))) {
-            filenames.append(filenames.at(i));
+            filtered_filenames.append(filenames.at(i));
         }
     }
 
