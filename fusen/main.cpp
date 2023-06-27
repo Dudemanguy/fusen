@@ -134,6 +134,11 @@ static void initializeSettings(mainSettings *settings) {
     if (yaml["clearTagsOnImport"]) {
         settings->clearTags->setChecked(yaml["clearTagsOnImport"].as<bool>());
     }
+    if (yaml["defaultApplicationPath"]) {
+        settings->defaultApplicationPath = yaml["defaultApplicationPath"].as<std::string>();
+    } else {
+        settings->defaultApplicationPath = "mpv";
+    }
 }
 
 std::string sanitize_tags(std::string str) {
@@ -148,6 +153,7 @@ std::string sanitize_tags(std::string str) {
 static void saveSettings(mainSettings *settings) {
     YAML::Node yaml;
     yaml["clearTagsOnImport"] = settings->clearTags->isChecked();
+    yaml["defaultApplicationPath"] = settings->defaultApplicationPath.c_str();
 
     fs::path file = getUserFile("settings");
     std::ofstream fout(file.string().c_str());
@@ -309,6 +315,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     settingsMenu->addAction(clearTags);
     settings->clearTags = clearTags;
 
+    QAction *defaultOpen = new QAction(tr("&Default Application to Open Files"), this);
+    connect(defaultOpen, &QAction::triggered, this, &MainWindow::defaultApplicationOpen);
+    settingsMenu->addAction(defaultOpen);
+
     initializeSettings(settings);
 
     QWidget *centralWidget = new QWidget(this);
@@ -424,6 +434,25 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     delete settings;
 }
 
+void MainWindow::defaultApplicationOpen() {
+    defaultOpen = new QDialog(this);
+    QLabel *label = new QLabel("Default Application Path:", this);
+    defaultOpenWith = new QLineEdit(this);
+    QPushButton *ok = new QPushButton("OK", this);
+    QPushButton *cancel = new QPushButton("Cancel", this);
+
+    connect(ok, &QPushButton::released, this, [this]{ MainWindow::updateApplication(true);});
+    connect(cancel, &QPushButton::released, this, [this]{ MainWindow::updateApplication(false);});
+
+    QFormLayout *layout = new QFormLayout();
+    layout->addRow(label, defaultOpenWith);
+    layout->addRow(ok, cancel);
+    defaultOpen->setLayout(layout);
+
+    defaultOpen->setWindowTitle("Default Application");
+    defaultOpen->show();
+}
+
 void MainWindow::importTags() {
     QFileDialog *fileDialog = new QFileDialog;
     QString filename = fileDialog->getOpenFileName(this, "Import Tags", "", "YAML (*.yaml *.yml)");
@@ -463,8 +492,8 @@ void MainWindow::importTags() {
 
 void MainWindow::openFiles() {
     QStringList filenames = getSelectedFiles(listView);
-    //TODO: don't hardcode this and actually use mime types
-    std::string args = "mpv ";
+    //TODO: use mime types somehow
+    std::string args = settings->defaultApplicationPath + " ";
     for (int i = 0; i < filenames.size(); ++i) {
         args += "\"" + filenames.at(i).toStdString() + "\" ";
     }
@@ -502,6 +531,13 @@ void MainWindow::tagFiles() {
 
     tagDialog->setWindowTitle("Add or Delete Tags");
     tagDialog->show();
+}
+
+void MainWindow::updateApplication(bool update) {
+    if (update) {
+        settings->defaultApplicationPath = defaultOpenWith->text().toStdString();
+    }
+    defaultOpen->close();
 }
 
 void MainWindow::updateEntries(const QString str) {

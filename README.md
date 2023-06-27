@@ -15,8 +15,7 @@ meson setup build -Dprefix=/usr
 meson compile -C build
 sudo meson install -C build
 ```
-
-Currently, opening files is hard coded to use mpv. In the future, this will be customizable somehow.
+By default, mpv is used for trying to open files.
 
 ## Tagging
 In the dialog, you can add any number of files or directories to the database. In the list, you can right-click

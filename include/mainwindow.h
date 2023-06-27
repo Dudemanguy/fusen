@@ -7,6 +7,7 @@
 
 struct mainSettings {
     QAction *clearTags;
+    std::string defaultApplicationPath;
 };
 
 class MainWindow : public QMainWindow {
@@ -15,6 +16,8 @@ class MainWindow : public QMainWindow {
         mainSettings *settings;
         sqlite3 *database;
         QAction *clearTags;
+        QDialog *defaultOpen;
+        QLineEdit *defaultOpenWith;
         QStringList entries;
         QListView *listView;
         QStringListModel *model;
@@ -26,10 +29,12 @@ class MainWindow : public QMainWindow {
         void addDirectory(bool recursive);
         void addFiles();
         void closeEvent(QCloseEvent *event);
+        void defaultApplicationOpen();
         void importTags();
         void openFiles();
         void removeFiles();
         void tagFiles();
+        void updateApplication(bool update);
         void updateEntries(const QString str);
         void updateNameCheck(bool checked);
         void updateTags(bool add);
