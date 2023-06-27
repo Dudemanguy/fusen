@@ -6,7 +6,7 @@
 #include <sqlite3.h>
 
 struct mainSettings {
-    QAction *importSettings;
+    QAction *clearTags;
 };
 
 class MainWindow : public QMainWindow {
@@ -14,8 +14,8 @@ class MainWindow : public QMainWindow {
         explicit MainWindow(QWidget *parent = 0);
         mainSettings *settings;
         sqlite3 *database;
+        QAction *clearTags;
         QStringList entries;
-        QAction *importSettings;
         QListView *listView;
         QStringListModel *model;
         QLineEdit *searchBox;
@@ -26,6 +26,7 @@ class MainWindow : public QMainWindow {
         void addDirectory(bool recursive);
         void addFiles();
         void closeEvent(QCloseEvent *event);
+        void importTags();
         void openFiles();
         void removeFiles();
         void tagFiles();

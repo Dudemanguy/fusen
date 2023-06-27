@@ -30,5 +30,19 @@ In the search box at, tags can be searched for matches and update the list of en
 comma-delineated. Additionally, prepending the tag with a `-` character performs an exclusion operation instead.
 In other words, `-foo` would return all entries that are *not* tagged with `foo`.
 
+## Importing Tags
+You can mass import tags for simplicity. fusen accepts files in yaml that are formatted as shown below:
+```
+filename1:
+    - tag1
+    - tag2
+    - tag3
+filename2:
+    - tag2
+    - tag4
+```
+If the option `Clear Existing Tags on Import` is checked, any existing tags that exist for that particular file will be
+cleared before the new tags are applied.
+
 ## License
 GPLv3

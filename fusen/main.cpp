@@ -127,10 +127,13 @@ static void initializeSettings(mainSettings *settings) {
     fs::path file = getUserFile("settings");
     if (!fs::exists(file)) {
         fs::create_directories(file.parent_path());
+        return;
     }
 
     YAML::Node yaml = YAML::LoadFile(file.string().c_str());
-    settings->importSettings->setChecked(yaml["importOverwrite"].as<bool>());
+    if (yaml["clearTagsOnImport"]) {
+        settings->clearTags->setChecked(yaml["clearTagsOnImport"].as<bool>());
+    }
 }
 
 std::string sanitize_tags(std::string str) {
@@ -144,7 +147,7 @@ std::string sanitize_tags(std::string str) {
 
 static void saveSettings(mainSettings *settings) {
     YAML::Node yaml;
-    yaml["importOverwrite"] = settings->importSettings->isChecked();
+    yaml["clearTagsOnImport"] = settings->clearTags->isChecked();
 
     fs::path file = getUserFile("settings");
     std::ofstream fout(file.string().c_str());
@@ -175,6 +178,27 @@ static void sql_add_columns(sqlite3 *database, std::string key, QStringList colu
         if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
             std::cerr << "Error while adding columns: " << err << std::endl;
         }
+    }
+}
+
+static void sql_clear_tags(sqlite3 *database, QSet<QString> columns, QStringList filenames) {
+    char *err;
+    std::string sql = std::string("UPDATE ") + TABLE + " SET ";
+    // Don't clear primary key
+    std::string primary_key = std::string(PRIMARY_KEY);
+    columns.remove(PRIMARY_KEY);
+    for (auto i = columns.begin(), end = columns.end(); i != end; ++i) {
+        sql += "'" + (*i).toStdString() + "' = NULL,";
+    }
+    // Remove trailing comma
+    sql.pop_back();
+    sql += " WHERE ";
+    for (int i = 0; i < filenames.size(); ++i) {
+        sql += primary_key + " = '" + filenames.at(i).toStdString() + "' OR ";
+    }
+    sql.erase(sql.end() - 3, sql.end());
+    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
+        std::cerr << "Error while clearing tags: " << err << std::endl;
     }
 }
 
@@ -280,10 +304,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     QMenu *settingsMenu = menuBar()->addMenu(tr("&Settings"));
 
-    importSettings = new QAction(tr("&Overwrite Database on Import"), this);
-    importSettings->setCheckable(true);
-    settingsMenu->addAction(importSettings);
-    settings->importSettings = importSettings;
+    clearTags = new QAction(tr("&Clear Existing Tags on Import"), this);
+    clearTags->setCheckable(true);
+    settingsMenu->addAction(clearTags);
+    settings->clearTags = clearTags;
 
     initializeSettings(settings);
 
@@ -302,6 +326,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     searchNames = new QCheckBox("Filter by name", this);
     connect(searchNames, &QCheckBox::stateChanged, this, &MainWindow::updateNameCheck);
+
+    QPushButton *importTags = new QPushButton("Import", this);
+    connect(importTags, &QPushButton::released, this, &MainWindow::importTags);
 
     listView = new QListView(this);
     listView->setModel(model);
@@ -323,6 +350,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QGridLayout *mainLayout = new QGridLayout(centralWidget);
     mainLayout->addWidget(searchBox, 0, 0, 1, 1);
     mainLayout->addWidget(searchNames, 0, 1, Qt::AlignLeft);
+    mainLayout->addWidget(importTags, 0, 2, Qt::AlignLeft);
     mainLayout->addWidget(listView, 1, 0, 1, 3);
 }
 
@@ -394,6 +422,43 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     sqlite3_close(database);
     saveSettings(settings);
     delete settings;
+}
+
+void MainWindow::importTags() {
+    QFileDialog *fileDialog = new QFileDialog;
+    QString filename = fileDialog->getOpenFileName(this, "Import Tags", "", "YAML (*.yaml *.yml)");
+    if (!filename.isEmpty()) {
+        QSet<QString> columns = sql_get_columns(database);
+        YAML::Node node = YAML::LoadFile(filename.toStdString().c_str());
+        for (YAML::const_iterator it = node.begin(); it != node.end(); ++it) {
+            QStringList filenames;
+            QStringList new_columns;
+            QStringList tags;
+            filenames.append(it->first.as<std::string>().c_str());
+            YAML::Node value = it->second;
+            switch (value.Type()) {
+            case YAML::NodeType::Sequence:
+                for (size_t i = 0; i < value.size(); ++i) {
+                    QString tag = sanitize_tags(it->second[i].as<std::string>()).c_str();
+                    if (!columns.contains(tag.toLower())) {
+                        columns.insert(tag.toLower());
+                        new_columns.append(tag.toLower());
+                    }
+                    tags.append(tag);
+                }
+                break;
+            default:
+                break;
+            }
+            if (!new_columns.isEmpty()) {
+                sql_add_columns(database, std::string(PRIMARY_KEY), new_columns);
+            }
+            if (settings->clearTags->isChecked()) {
+                sql_clear_tags(database, columns, filenames);
+            }
+            sql_update_tags(database, std::string(PRIMARY_KEY), filenames, tags, true);
+        }
+    }
 }
 
 void MainWindow::openFiles() {
