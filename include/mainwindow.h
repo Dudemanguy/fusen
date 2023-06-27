@@ -21,6 +21,8 @@ class MainWindow : public QMainWindow {
         QStringList entries;
         QListView *listView;
         QStringListModel *model;
+        QDialog *openWith;
+        QLineEdit *openWithEntry;
         QLineEdit *searchBox;
         QCheckBox *searchNames;
         QDialog *tagDialog;
@@ -31,7 +33,8 @@ class MainWindow : public QMainWindow {
         void closeEvent(QCloseEvent *event);
         void defaultApplicationOpen();
         void importTags();
-        void openFiles();
+        void openFiles(bool defaultApplication);
+        void openFilesWith();
         void removeFiles();
         void tagFiles();
         void updateApplication(bool update);

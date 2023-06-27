@@ -346,8 +346,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     listView->setContextMenuPolicy(Qt::ActionsContextMenu);
 
     QAction *openFiles = new QAction(tr("&Open"), this);
-    connect(openFiles, &QAction::triggered, this, &MainWindow::openFiles);
+    connect(openFiles, &QAction::triggered, this, [this]{MainWindow::openFiles(true);});
     listView->addAction(openFiles);
+
+    QAction *openFilesWith = new QAction(tr("&Open With"), this);
+    connect(openFilesWith, &QAction::triggered, this, &MainWindow::openFilesWith);
+    listView->addAction(openFilesWith);
 
     QAction *tagFiles = new QAction(tr("&Tag"), this);
     connect(tagFiles, &QAction::triggered, this, &MainWindow::tagFiles);
@@ -490,15 +494,36 @@ void MainWindow::importTags() {
     }
 }
 
-void MainWindow::openFiles() {
+void MainWindow::openFiles(bool defaultApplication) {
     QStringList filenames = getSelectedFiles(listView);
     //TODO: use mime types somehow
-    std::string args = settings->defaultApplicationPath + " ";
+    std::string args = defaultApplication ? settings->defaultApplicationPath : openWithEntry->text().toStdString();
+    args += " ";
     for (int i = 0; i < filenames.size(); ++i) {
         args += "\"" + filenames.at(i).toStdString() + "\" ";
     }
     popen(args.c_str(), "r");
 }
+
+void MainWindow::openFilesWith() {
+    openWith = new QDialog(this);
+    QLabel *label = new QLabel("Open With:", this);
+    openWithEntry = new QLineEdit(this);
+    QPushButton *ok = new QPushButton("OK", this);
+    QPushButton *cancel = new QPushButton("Cancel", this);
+
+    connect(ok, &QPushButton::released, this, [this]{ openWith->close(); MainWindow::openFiles(false);});
+    connect(cancel, &QPushButton::released, this, [this]{ openWith->close();});
+
+    QFormLayout *layout = new QFormLayout();
+    layout->addRow(label, openWithEntry);
+    layout->addRow(ok, cancel);
+    openWith->setLayout(layout);
+
+    openWith->setWindowTitle("Open With");
+    openWith->show();
+}
+
 
 void MainWindow::removeFiles() {
     QStringList filenames = getSelectedFiles(listView);
