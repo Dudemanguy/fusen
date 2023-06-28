@@ -32,11 +32,11 @@ In other words, `-foo` would return all entries that are *not* tagged with `foo`
 ## Importing Tags
 You can mass import tags for simplicity. fusen accepts files in yaml that are formatted as shown below:
 ```
-filename1:
+filepath1:
     - tag1
     - tag2
     - tag3
-filename2:
+filepath2:
     - tag2
     - tag4
 ```
