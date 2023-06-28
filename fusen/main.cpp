@@ -218,6 +218,16 @@ static QSet<QString> sql_get_columns(sqlite3 *database) {
     return columns;
 }
 
+static QSet<QString> sql_get_paths(sqlite3 *database) {
+    QSet<QString> paths;
+    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
+    char *err;
+    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&paths), &err)) {
+        std::cerr << "Error while reading paths: " << err << std::endl;
+    }
+    return paths;
+}
+
 static void sql_update_tags(sqlite3 *database, std::string key,
                             QStringList filenames, QStringList tags,
                             bool add)
@@ -462,11 +472,16 @@ void MainWindow::importTags() {
     QString filename = fileDialog->getOpenFileName(this, "Import Tags", "", "YAML (*.yaml *.yml)");
     if (!filename.isEmpty()) {
         QSet<QString> columns = sql_get_columns(database);
+        QSet<QString> paths = sql_get_paths(database);
         YAML::Node node = YAML::LoadFile(filename.toStdString().c_str());
         for (YAML::const_iterator it = node.begin(); it != node.end(); ++it) {
             QStringList filenames;
             QStringList new_columns;
             QStringList tags;
+            if (!paths.contains(it->first.as<std::string>().c_str())) {
+                std::cerr << it->first.as<std::string>() << " does not exist in database!" << std::endl;
+                continue;
+            }
             filenames.append(it->first.as<std::string>().c_str());
             YAML::Node value = it->second;
             switch (value.Type()) {
