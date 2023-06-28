@@ -5,6 +5,7 @@
 #include <pwd.h>
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QLabel>
@@ -363,6 +364,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     connect(openFilesWith, &QAction::triggered, this, &MainWindow::openFilesWith);
     listView->addAction(openFilesWith);
 
+    QAction *copyPath = new QAction(tr("&Copy Text"), this);
+    connect(copyPath, &QAction::triggered, this, &MainWindow::copyPath);
+    listView->addAction(copyPath);
+
     QAction *tagFiles = new QAction(tr("&Tag"), this);
     connect(tagFiles, &QAction::triggered, this, &MainWindow::tagFiles);
     listView->addAction(tagFiles);
@@ -446,6 +451,13 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     sqlite3_close(database);
     saveSettings(settings);
     delete settings;
+}
+
+void MainWindow::copyPath() {
+    // If multiple are selected just copy the first one.
+    QStringList filenames = getSelectedFiles(listView);
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    clipboard->setText(filenames[0]);
 }
 
 void MainWindow::defaultApplicationOpen() {

@@ -31,6 +31,7 @@ class MainWindow : public QMainWindow {
         void addDirectory(bool recursive);
         void addFiles();
         void closeEvent(QCloseEvent *event);
+        void copyPath();
         void defaultApplicationOpen();
         void importTags();
         void openFiles(bool defaultApplication);
