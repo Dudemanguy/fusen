@@ -201,7 +201,8 @@ static void sql_clear_tags(sqlite3 *database, QSet<QString> columns, QStringList
     sql.pop_back();
     sql += " WHERE ";
     for (int i = 0; i < filenames.size(); ++i) {
-        sql += primary_key + " = '" + filenames.at(i).toStdString() + "' OR ";
+        QString filename = filenames[i].replace("\'", "\'\'");
+        sql += primary_key + " = '" + filenames[i].toStdString() + "' OR ";
     }
     sql.erase(sql.end() - 3, sql.end());
     if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
@@ -243,7 +244,8 @@ static void sql_update_tags(sqlite3 *database, std::string key,
     sql.erase(sql.end() - 2, sql.end());
     sql += " WHERE ";
     for (int i = 0; i < filenames.size(); ++i) {
-        sql += key + " = '" + filenames.at(i).toStdString() + "' OR ";
+        QString filename = filenames[i].replace("\'", "\'\'");
+        sql += key + " = '" + filename.toStdString() + "' OR ";
     }
     sql.erase(sql.end() - 3, sql.end());
     if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
