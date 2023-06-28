@@ -589,7 +589,7 @@ void MainWindow::updateEntries(const QString str) {
         if (tags.at(i)[0] == '-') {
             tag = tags.at(i).mid(1).toLower().toStdString();
         }
-        if (!columns.contains(tag.c_str())) {
+        if (!columns.contains(tag.c_str()) && tags.at(i)[0] != '-') {
             goto done;
         }
     }
@@ -601,6 +601,9 @@ void MainWindow::updateEntries(const QString str) {
         if (tags.at(i)[0] == '-') {
             include = "";
             tag = tags.at(i).mid(1).toStdString();
+            if (!columns.contains(tag.c_str())) {
+                continue;
+            }
         }
         sql += "\"" + tag + "\" IS" + include + "NULL AND ";
     }
