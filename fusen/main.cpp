@@ -15,10 +15,8 @@
  */
 
 #include <algorithm>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <pwd.h>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -28,18 +26,14 @@
 #include <QListView>
 #include <QMenuBar>
 #include <QPushButton>
-#include <QSet>
 #include <QStringListModel>
 #include <yaml-cpp/yaml.h>
-#include <unistd.h>
 
 #include "mainwindow.h"
-
-#define TABLE "master"
-#define PRIMARY_KEY "path"
+#include "sql.h"
+#include "utils.h"
 
 namespace fs = std::filesystem;
-static fs::path getUserFile(const char *type);
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
@@ -51,63 +45,6 @@ int main(int argc, char *argv[]) {
     return app.exec();
 }
 
-static int col_callback(void *data, int argc, char **argv, char **azColName) {
-    QSet<QString> *columns = static_cast<QSet<QString> *>(data);
-    for (int i = 0; i < argc; i++) {
-        if (strcmp(azColName[i], "name") == 0) {
-            columns->insert(argv[i]);
-        }
-    }
-    return 0;
-}
-
-static int entry_callback(void *data, int argc, char **argv, char **azColName) {
-    QSet<QString> *entries = static_cast<QSet<QString> *>(data);
-    for (int i = 0; i < argc; i++) {
-        entries->insert(argv[i]);
-    }
-    return 0;
-}
-
-static QStringList build_entries(sqlite3 *database) {
-    QSet<QString> entries;
-    std::string sql = std::string("SELECT ") + PRIMARY_KEY + std::string(" FROM ") + TABLE;
-    char *err;
-    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&entries), &err)) {
-        std::cerr << "Error while trying to read table: " << err << std::endl;
-    }
-    QStringList list(entries.begin(), entries.end());
-    return list;
-}
-
-static sqlite3 *connectDatabase() {
-    fs::path file = getUserFile("data");
-
-    bool create_table = false;
-    if (!fs::exists(file)) {
-        create_table = true;
-        fs::create_directories(file.parent_path());
-    }
-
-    sqlite3 *database;
-    int ret = sqlite3_open(file.string().c_str(), &database);
-    if (ret != SQLITE_OK) {
-        std::cerr << "Error while trying to open database: " << sqlite3_errstr(ret) << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-    if (create_table) {
-        char *err;
-        std::string sql = std::string("CREATE TABLE ") + TABLE + std::string("(") + \
-                        PRIMARY_KEY + std::string(" VARCHAR(1024) PRIMARY KEY)");
-        if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-            std::cerr << "Error while creating table: " << err << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-    return database;
-}
-
 static QStringList getSelectedFiles(QListView *listView) {
     QModelIndexList indexes = listView->selectionModel()->selectedIndexes();
     QStringList list;
@@ -115,29 +52,6 @@ static QStringList getSelectedFiles(QListView *listView) {
         list << index.data(Qt::DisplayRole).toString();
     }
     return list;
-}
-
-static fs::path getUserFile(const char *type) {
-    const char *homedir;
-    const char *filename = NULL;
-    if (strcmp(type, "data") == 0) {
-        filename = "data.sqlite";
-    } else if (strcmp(type, "settings") == 0) {
-        filename = "settings.yaml";
-    }
-
-    assert(filename && filename[0]);
-
-    if ((homedir = getenv("HOME")) == NULL) {
-        homedir = getpwuid(getuid())->pw_dir;
-    }
-    if (homedir == NULL) {
-        std::cerr << "Couldn't locate the user's home directory. Exiting!" << std::endl;
-        exit(EXIT_FAILURE);
-    }
-    fs::path file = fs::path(homedir) / ".local" / "share" / "fusen" / filename;
-
-    return file;
 }
 
 static void initializeSettings(mainSettings *settings) {
@@ -190,133 +104,6 @@ static QStringList splitTags(std::string str, char delimeter) {
         split.append(item.c_str());
     }
     return split;
-}
-
-static void sql_add_columns(sqlite3 *database, std::string key, QStringList columns) {
-    char *err;
-    // Has to be done one column at a time.
-    for (int i = 0; i < columns.size(); ++i) {
-        std::string sql = std::string("ALTER TABLE ") + TABLE + " ADD COLUMN " +
-                          "'" + columns.at(i).toStdString() + "' INTEGER";
-        if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-            std::cerr << "Error while adding columns: " << err << std::endl;
-        }
-    }
-}
-
-static void sql_clear_tags(sqlite3 *database, QSet<QString> columns, QStringList filenames) {
-    char *err;
-    std::string sql = std::string("UPDATE ") + TABLE + " SET ";
-    // Don't clear primary key
-    std::string primary_key = std::string(PRIMARY_KEY);
-    columns.remove(PRIMARY_KEY);
-    for (auto i = columns.begin(), end = columns.end(); i != end; ++i) {
-        sql += "'" + (*i).toStdString() + "' = NULL,";
-    }
-    // Remove trailing comma
-    sql.pop_back();
-    sql += " WHERE ";
-    for (int i = 0; i < filenames.size(); ++i) {
-        QString filename = filenames[i].replace("\'", "\'\'");
-        sql += primary_key + " = '" + filenames[i].toStdString() + "' OR ";
-    }
-    sql.erase(sql.end() - 3, sql.end());
-    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-        std::cerr << "Error while clearing tags: " << err << std::endl;
-    }
-}
-
-static QSet<QString> sql_get_columns(sqlite3 *database) {
-    QSet<QString> columns;
-    std::string sql = std::string("PRAGMA table_info (") + TABLE + std::string(")");
-    char *err;
-    if (sqlite3_exec(database, sql.c_str(), col_callback, static_cast<void *>(&columns), &err)) {
-        std::cerr << "Error while reading columns: " << err << std::endl;
-    }
-    return columns;
-}
-
-static QSet<QString> sql_get_paths(sqlite3 *database) {
-    QSet<QString> paths;
-    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
-    char *err;
-    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&paths), &err)) {
-        std::cerr << "Error while reading paths: " << err << std::endl;
-    }
-    return paths;
-}
-
-static void sql_update_tags(sqlite3 *database, std::string key,
-                            QStringList filenames, QStringList tags,
-                            bool add)
-{
-    char *err;
-    std::string value = add ? "1" : "NULL";
-    std::string sql = std::string("UPDATE ") + TABLE + " SET ";
-    for (int i = 0; i < tags.size(); ++i) {
-        sql += "'" + tags.at(i).toStdString() + "' = " + value + ", ";
-    }
-    // Remove trailing comma
-    sql.erase(sql.end() - 2, sql.end());
-    sql += " WHERE ";
-    for (int i = 0; i < filenames.size(); ++i) {
-        QString filename = filenames[i].replace("\'", "\'\'");
-        sql += key + " = '" + filename.toStdString() + "' OR ";
-    }
-    sql.erase(sql.end() - 3, sql.end());
-    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-        std::cerr << "Error while adding tags: " << err << std::endl;
-    }
-}
-
-static QStringList sql_delete(sqlite3 *database, std::string key, QStringList values) {
-    QStringList entries;
-    std::string sql = std::string("DELETE FROM ") + TABLE + " WHERE " + key + " IN (";
-    for (int i = 0; i < values.size(); ++i) {
-        std::string str = values.at(i).toStdString();
-        for (size_t i = 0; i < str.length(); ++i) {
-            if (str[i] == '\'') {
-                str.insert(i, "'");
-                ++i;
-            }
-        }
-        sql += "('" + str + "'),";
-        entries.append(values.at(i));
-    }
-    // Remove trailing comma
-    sql.pop_back();
-    sql += ");";
-    char *err;
-    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-        std::cerr << "Error while removing files: " << err << std::endl;
-        entries.clear();
-    }
-    return entries;
-}
-
-static QStringList sql_insert_into(sqlite3 *database, std::string key, QStringList values) {
-    QStringList entries;
-    std::string sql = std::string("INSERT INTO ") + TABLE + " (" + key + ") VALUES ";
-    for (int i = 0; i < values.size(); ++i) {
-        std::string str = values.at(i).toStdString();
-        for (size_t i = 0; i < str.length(); ++i) {
-            if (str[i] == '\'') {
-                str.insert(i, "'");
-                ++i;
-            }
-        }
-        sql += "('" + str + "'),";
-        entries.append(values.at(i));
-    }
-    // Replace trailing comma
-    sql.pop_back();
-    sql += ';';
-    char *err;
-    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-        std::cerr << "Error while adding files: " << err << std::endl;
-        entries.clear();
-    }
-    return entries;
 }
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
@@ -402,11 +189,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 }
 
 void MainWindow::addDirectory(bool recursive) {
-    char *err;
     std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
-    QSet<QString> existing_files;
-    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&existing_files), &err)) {
-        std::cerr << "Error while reading database: " << err << std::endl;
+    QSet<QString> existing_files = sql_get_paths(database);
+    if (existing_files.isEmpty()) {
         return;
     }
 
@@ -439,11 +224,9 @@ void MainWindow::addDirectory(bool recursive) {
 }
 
 void MainWindow::addFiles() {
-    char *err;
     std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
-    QSet<QString> existing_files;
-    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&existing_files), &err)) {
-        std::cerr << "Error while reading database: " << err << std::endl;
+    QSet<QString> existing_files = sql_get_paths(database);
+    if (existing_files.isEmpty()) {
         return;
     }
 
@@ -573,7 +356,7 @@ void MainWindow::openFilesWith() {
 void MainWindow::removeFiles() {
     QStringList filenames = getSelectedFiles(listView);
     if (!filenames.isEmpty()) {
-        QStringList old_entries = sql_delete(database, std::string(PRIMARY_KEY), filenames);
+        QStringList old_entries = sql_delete_paths(database, std::string(PRIMARY_KEY), filenames);
         if (!old_entries.isEmpty()) {
             for (int i = 0; i < old_entries.size(); ++i) {
                 entries.removeOne(old_entries.at(i));
@@ -611,11 +394,9 @@ void MainWindow::updateApplication(bool update) {
 }
 
 void MainWindow::updateEntries(const QString str) {
-    char *err;
     QSet<QString> filtered_entries;
     QSet<QString> columns;
     QStringList tags;
-    std::string sql;
 
     if (searchNames->isChecked()) {
         entries = build_entries(database);
@@ -639,21 +420,7 @@ void MainWindow::updateEntries(const QString str) {
         }
     }
 
-    sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE + " WHERE ";
-    for (int i = 0; i < tags.size(); ++i) {
-        std::string tag = tags.at(i).toStdString();
-        std::string include = " NOT ";
-        if (tags.at(i)[0] == '-') {
-            include = "";
-            tag = tags.at(i).mid(1).toStdString();
-            if (!columns.contains(tag.c_str())) {
-                continue;
-            }
-        }
-        sql += "\"" + tag + "\" IS" + include + "NULL AND ";
-    }
-    sql.erase(sql.end() - 5, sql.end());
-    sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&filtered_entries), &err);
+    filtered_entries = sql_update_entries(database, tags, columns);
 
 done:
     QStringList filtered_list(filtered_entries.begin(), filtered_entries.end());
