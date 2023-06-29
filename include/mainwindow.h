@@ -17,22 +17,20 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <QCheckBox>
 #include <QLineEdit>
 #include <QMainWindow>
+#include <QStringListModel>
 #include <sqlite3.h>
 
-struct mainSettings {
-    QAction *clearTags;
-    std::string defaultApplicationPath;
-};
+#include "utils.h"
 
 class MainWindow : public QMainWindow {
     public:
         explicit MainWindow(QWidget *parent = 0);
     private:
-        mainSettings *settings;
-        sqlite3 *database;
         QAction *clearTags;
+        sqlite3 *database;
         QDialog *defaultOpen;
         QLineEdit *defaultOpenWith;
         QStringList entries;
@@ -42,11 +40,13 @@ class MainWindow : public QMainWindow {
         QLineEdit *openWithEntry;
         QLineEdit *searchBox;
         QCheckBox *searchNames;
+        mainSettings *settings;
         QDialog *tagDialog;
         QLineEdit *tagEdit;
     private slots:
         void addDirectory(bool recursive);
         void addFiles();
+        void addScanDirs();
         void closeEvent(QCloseEvent *event);
         void copyPath();
         void defaultApplicationOpen();

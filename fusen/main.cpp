@@ -18,7 +18,6 @@
 #include <fstream>
 #include <iostream>
 #include <QApplication>
-#include <QCheckBox>
 #include <QClipboard>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -26,10 +25,10 @@
 #include <QListView>
 #include <QMenuBar>
 #include <QPushButton>
-#include <QStringListModel>
 #include <yaml-cpp/yaml.h>
 
 #include "mainwindow.h"
+#include "scandirs.h"
 #include "sql.h"
 #include "utils.h"
 
@@ -54,7 +53,7 @@ static QStringList getSelectedFiles(QListView *listView) {
     return list;
 }
 
-static void initializeSettings(mainSettings *settings) {
+static void initializeSettings(sqlite3 *database, mainSettings *settings) {
     fs::path file = getUserFile("settings");
     if (!fs::exists(file)) {
         fs::create_directories(file.parent_path());
@@ -69,6 +68,16 @@ static void initializeSettings(mainSettings *settings) {
         settings->defaultApplicationPath = yaml["defaultApplicationPath"].as<std::string>();
     } else {
         settings->defaultApplicationPath = "mpv";
+    }
+    if (yaml["scanDirectories"] && yaml["scanDirectories"].IsSequence()) {
+        for (size_t i = 0; i < yaml["scanDirectories"].size(); ++i) {
+            settings->scanDirs.append(yaml["scanDirectories"][i].as<std::string>().c_str());
+        }
+    }
+
+    QSet<QString> existing_files = sql_get_paths(database);
+    for (int i = 0; i < settings->scanDirs.size(); ++i) {
+        scanDirectories(database, settings->scanDirs.at(i), existing_files);
     }
 }
 
@@ -85,6 +94,9 @@ static void saveSettings(mainSettings *settings) {
     YAML::Node yaml;
     yaml["clearTagsOnImport"] = settings->clearTags->isChecked();
     yaml["defaultApplicationPath"] = settings->defaultApplicationPath.c_str();
+    for (int i = 0; i < settings->scanDirs.size(); ++i) {
+        yaml["scanDirectories"][i] = settings->scanDirs.at(i).toStdString().c_str();
+    }
 
     fs::path file = getUserFile("settings");
     std::ofstream fout(file.string().c_str());
@@ -135,7 +147,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     connect(defaultOpen, &QAction::triggered, this, &MainWindow::defaultApplicationOpen);
     settingsMenu->addAction(defaultOpen);
 
-    initializeSettings(settings);
+    QAction *addScanDirs = new QAction(tr("&Scan Directories"), this);
+    connect(addScanDirs, &QAction::triggered, this, &MainWindow::addScanDirs);
+    settingsMenu->addAction(addScanDirs);
+
+    initializeSettings(database, settings);
 
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
@@ -189,34 +205,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 }
 
 void MainWindow::addDirectory(bool recursive) {
-    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
     QSet<QString> existing_files = sql_get_paths(database);
-    if (existing_files.isEmpty()) {
-        return;
-    }
-
-    QStringList filenames;
     QString directory = QFileDialog::getExistingDirectory(this, "Add Directory");
-    if (!directory.isEmpty()) {
-        fs::path path = fs::path(directory.toStdString());
-        if (recursive) {
-            for (auto& p: fs::recursive_directory_iterator(path)) {
-                if (p.is_regular_file() and !existing_files.contains(p.path().string().c_str())) {
-                    filenames.append(p.path().string().c_str());
-                }
-            }
-        } else {
-            for (auto& p: fs::directory_iterator(path)) {
-                if (p.is_regular_file() and !existing_files.contains(p.path().string().c_str())) {
-                    filenames.append(p.path().string().c_str());
-                }
-            }
-        }
-    }
+    QStringList filenames = getNewDirectoryFiles(directory, existing_files, recursive);
     if (!filenames.isEmpty()) {
-        QStringList new_entries = sql_insert_into(database, std::string(PRIMARY_KEY), filenames);
-        if (!new_entries.isEmpty()) {
-            entries += new_entries;
+        if (sql_insert_into(database, std::string(PRIMARY_KEY), filenames)) {
+            entries += filenames;
             entries.sort();
             model->setStringList(entries);
         }
@@ -239,13 +233,16 @@ void MainWindow::addFiles() {
     }
 
     if (!filtered_filenames.isEmpty()) {
-        QStringList new_entries = sql_insert_into(database, std::string(PRIMARY_KEY), filtered_filenames);
-        if (!new_entries.isEmpty()) {
-            entries += new_entries;
+        if (sql_insert_into(database, std::string(PRIMARY_KEY), filtered_filenames)) {
+            entries += filtered_filenames;
             entries.sort();
             model->setStringList(entries);
         }
     }
+}
+
+void MainWindow::addScanDirs() {
+    new ScanDirsWidget(database, settings, this);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

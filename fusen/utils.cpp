@@ -20,7 +20,29 @@
 #include <pwd.h>
 #include <unistd.h>
 
+#include "sql.h"
 #include "utils.h"
+
+QStringList getNewDirectoryFiles(QString directory, QSet<QString> existing_files, bool recursive) {
+    QStringList filenames;
+    if (!directory.isEmpty()) {
+        fs::path path = fs::path(directory.toStdString());
+        if (recursive) {
+            for (auto& p: fs::recursive_directory_iterator(path)) {
+                if (p.is_regular_file() and !existing_files.contains(p.path().string().c_str())) {
+                    filenames.append(p.path().string().c_str());
+                }
+            }
+        } else {
+            for (auto& p: fs::directory_iterator(path)) {
+                if (p.is_regular_file() and !existing_files.contains(p.path().string().c_str())) {
+                    filenames.append(p.path().string().c_str());
+                }
+            }
+        }
+    }
+    return filenames;
+}
 
 fs::path getUserFile(const char *type) {
     const char *homedir;
@@ -43,4 +65,12 @@ fs::path getUserFile(const char *type) {
     fs::path file = fs::path(homedir) / ".local" / "share" / "fusen" / filename;
 
     return file;
+}
+
+bool scanDirectories(sqlite3 *database, QString directory, QSet<QString> existing_files) {
+    QStringList filenames = getNewDirectoryFiles(directory, existing_files, true);
+    if (!filenames.isEmpty()) {
+        return sql_insert_into(database, std::string(PRIMARY_KEY), filenames);
+    }
+    return true;
 }

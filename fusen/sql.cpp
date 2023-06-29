@@ -156,8 +156,7 @@ QSet<QString> sql_get_paths(sqlite3 *database) {
     return paths;
 }
 
-QStringList sql_insert_into(sqlite3 *database, std::string key, QStringList values) {
-    QStringList entries;
+bool sql_insert_into(sqlite3 *database, std::string key, QStringList values) {
     std::string sql = std::string("INSERT INTO ") + TABLE + " (" + key + ") VALUES ";
     for (int i = 0; i < values.size(); ++i) {
         std::string str = values.at(i).toStdString();
@@ -168,7 +167,6 @@ QStringList sql_insert_into(sqlite3 *database, std::string key, QStringList valu
             }
         }
         sql += "('" + str + "'),";
-        entries.append(values.at(i));
     }
     // Replace trailing comma
     sql.pop_back();
@@ -176,9 +174,9 @@ QStringList sql_insert_into(sqlite3 *database, std::string key, QStringList valu
     char *err;
     if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
         std::cerr << "Error while adding files: " << err << std::endl;
-        entries.clear();
+        return false;
     }
-    return entries;
+    return true;
 }
 
 QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags, QSet<QString> columns) {

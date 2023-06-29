@@ -14,24 +14,32 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef SCANDIRS_H
+#define SCANDIRS_H
 
-#include <filesystem>
-#include <QAction>
-#include <QSet>
-#include <QStringList>
+#include <QDialog>
+#include <QListWidget>
+#include <QWidget>
+#include <sqlite3.h>
 
-struct mainSettings {
-    QAction *clearTags;
-    std::string defaultApplicationPath;
-    QStringList scanDirs;
+#include "mainwindow.h"
+#include "utils.h"
+
+class ScanDirsWidget : public QWidget {
+    public:
+        explicit ScanDirsWidget(sqlite3 *dbase, mainSettings *set, QWidget *parent = 0);
+
+    private:
+        mainSettings *settings;
+        sqlite3 *database;
+        QDialog *scanDialog;
+        QListWidget *scanList;
+
+    private slots:
+        void addDirectory();
+        void cancel();
+        void removeDirectory();
+    //    void itemSelected( int item );
 };
-
-namespace fs = std::filesystem;
-
-fs::path getUserFile(const char *type);
-QStringList getNewDirectoryFiles(QString directory, QSet<QString> existing_files, bool recursive);
-bool scanDirectories(sqlite3 *database, QString directory, QSet<QString> existing_files);
 
 #endif

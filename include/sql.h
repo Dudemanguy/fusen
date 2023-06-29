@@ -31,7 +31,7 @@ void sql_clear_tags(sqlite3 *database, QSet<QString> columns, QStringList filena
 QStringList sql_delete_paths(sqlite3 *database, std::string key, QStringList values);
 QSet<QString> sql_get_columns(sqlite3 *database);
 QSet<QString> sql_get_paths(sqlite3 *database);
-QStringList sql_insert_into(sqlite3 *database, std::string key, QStringList values);
+bool sql_insert_into(sqlite3 *database, std::string key, QStringList values);
 QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags, QSet<QString> columns);
 void sql_update_tags(sqlite3 *database, std::string key,
                      QStringList filenames, QStringList tags, bool add);
