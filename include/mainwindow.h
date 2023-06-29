@@ -29,6 +29,7 @@ struct mainSettings {
 class MainWindow : public QMainWindow {
     public:
         explicit MainWindow(QWidget *parent = 0);
+    private:
         mainSettings *settings;
         sqlite3 *database;
         QAction *clearTags;
