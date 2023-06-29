@@ -353,10 +353,9 @@ void MainWindow::openFilesWith() {
 void MainWindow::removeFiles() {
     QStringList filenames = getSelectedFiles(listView);
     if (!filenames.isEmpty()) {
-        QStringList old_entries = sql_delete_paths(database, std::string(PRIMARY_KEY), filenames);
-        if (!old_entries.isEmpty()) {
-            for (int i = 0; i < old_entries.size(); ++i) {
-                entries.removeOne(old_entries.at(i));
+        if (sql_remove_paths(database, std::string(PRIMARY_KEY), filenames)) {
+            for (int i = 0; i < filenames.size(); ++i) {
+                entries.removeOne(filenames.at(i));
             }
             entries.sort();
             model->setStringList(entries);

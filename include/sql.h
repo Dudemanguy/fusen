@@ -28,10 +28,10 @@ sqlite3 *connectDatabase();
 QStringList build_entries(sqlite3 *database);
 void sql_add_columns(sqlite3 *database, std::string key, QStringList columns);
 void sql_clear_tags(sqlite3 *database, QSet<QString> columns, QStringList filenames);
-QStringList sql_delete_paths(sqlite3 *database, std::string key, QStringList values);
 QSet<QString> sql_get_columns(sqlite3 *database);
 QSet<QString> sql_get_paths(sqlite3 *database);
 bool sql_insert_into(sqlite3 *database, std::string key, QStringList values);
+bool sql_remove_paths(sqlite3 *database, std::string key, QStringList values);
 QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags, QSet<QString> columns);
 void sql_update_tags(sqlite3 *database, std::string key,
                      QStringList filenames, QStringList tags, bool add);

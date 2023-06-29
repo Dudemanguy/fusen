@@ -111,31 +111,6 @@ void sql_clear_tags(sqlite3 *database, QSet<QString> columns, QStringList filena
     }
 }
 
-QStringList sql_delete_paths(sqlite3 *database, std::string key, QStringList values) {
-    QStringList entries;
-    std::string sql = std::string("DELETE FROM ") + TABLE + " WHERE " + key + " IN (";
-    for (int i = 0; i < values.size(); ++i) {
-        std::string str = values.at(i).toStdString();
-        for (size_t i = 0; i < str.length(); ++i) {
-            if (str[i] == '\'') {
-                str.insert(i, "'");
-                ++i;
-            }
-        }
-        sql += "('" + str + "'),";
-        entries.append(values.at(i));
-    }
-    // Remove trailing comma
-    sql.pop_back();
-    sql += ");";
-    char *err;
-    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-        std::cerr << "Error while removing files: " << err << std::endl;
-        entries.clear();
-    }
-    return entries;
-}
-
 QSet<QString> sql_get_columns(sqlite3 *database) {
     QSet<QString> columns;
     std::string sql = std::string("PRAGMA table_info (") + TABLE + std::string(")");
@@ -174,6 +149,29 @@ bool sql_insert_into(sqlite3 *database, std::string key, QStringList values) {
     char *err;
     if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
         std::cerr << "Error while adding files: " << err << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool sql_remove_paths(sqlite3 *database, std::string key, QStringList values) {
+    std::string sql = std::string("DELETE FROM ") + TABLE + " WHERE " + key + " IN (";
+    for (int i = 0; i < values.size(); ++i) {
+        std::string str = values.at(i).toStdString();
+        for (size_t i = 0; i < str.length(); ++i) {
+            if (str[i] == '\'') {
+                str.insert(i, "'");
+                ++i;
+            }
+        }
+        sql += "('" + str + "'),";
+    }
+    // Remove trailing comma
+    sql.pop_back();
+    sql += ");";
+    char *err;
+    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
+        std::cerr << "Error while removing files: " << err << std::endl;
         return false;
     }
     return true;
