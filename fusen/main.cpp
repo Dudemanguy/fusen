@@ -76,6 +76,18 @@ static void initializeSettings(sqlite3 *database, mainSettings *settings) {
     }
 
     QSet<QString> existing_files = sql_get_paths(database);
+    // Remove files that no longer exist from the sql.
+    QStringList nonexisting_files;
+    for (auto i = existing_files.begin(), end = existing_files.end(); i != end; ++i) {
+        QString filename = *i;
+        fs::path file = fs::path(filename.toStdString());
+        if (!fs::exists(file)) {
+            nonexisting_files.append(filename);
+        }
+    }
+    if (!nonexisting_files.isEmpty()) {
+        sql_remove_paths(database, std::string(PRIMARY_KEY), nonexisting_files);
+    }
     for (int i = 0; i < settings->scanDirs.size(); ++i) {
         scanDirectories(database, settings->scanDirs.at(i), existing_files);
     }
