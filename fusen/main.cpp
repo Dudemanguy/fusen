@@ -44,6 +44,12 @@ int main(int argc, char *argv[]) {
     return app.exec();
 }
 
+QStringList build_entries(sqlite3 *database) {
+    QSet<QString> entries = sql_get_paths(database);
+    QStringList list(entries.begin(), entries.end());
+    return list;
+}
+
 static QStringList getSelectedFiles(QListView *listView) {
     QModelIndexList indexes = listView->selectionModel()->selectedIndexes();
     QStringList list;
@@ -86,7 +92,7 @@ static void initializeSettings(sqlite3 *database, mainSettings *settings) {
         }
     }
     if (!nonexisting_files.isEmpty()) {
-        sql_remove_paths(database, std::string(PRIMARY_KEY), nonexisting_files);
+        sql_remove_paths(database, nonexisting_files);
     }
     for (int i = 0; i < settings->scanDirs.size(); ++i) {
         scanDirectories(database, settings->scanDirs.at(i), existing_files);
@@ -123,7 +129,7 @@ static QStringList splitTags(std::string str, char delimeter) {
     QStringList split;
     while (std::getline(ss, item, delimeter)) {
         // Silently skip this since it can never work
-        if (item.compare(PRIMARY_KEY) == 0)
+        if (item.compare("path") == 0)
             continue;
         split.append(item.c_str());
     }
@@ -221,7 +227,7 @@ void MainWindow::addDirectory(bool recursive) {
     QString directory = QFileDialog::getExistingDirectory(this, "Add Directory");
     QStringList filenames = getNewDirectoryFiles(directory, existing_files, recursive);
     if (!filenames.isEmpty()) {
-        if (sql_insert_into(database, std::string(PRIMARY_KEY), filenames)) {
+        if (sql_add_paths(database, filenames)) {
             entries += filenames;
             entries.sort();
             model->setStringList(entries);
@@ -230,12 +236,7 @@ void MainWindow::addDirectory(bool recursive) {
 }
 
 void MainWindow::addFiles() {
-    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
     QSet<QString> existing_files = sql_get_paths(database);
-    if (existing_files.isEmpty()) {
-        return;
-    }
-
     QStringList filenames = QFileDialog::getOpenFileNames(this, "Add Files");
     QStringList filtered_filenames;
     for (int i = 0; i < filenames.size(); ++i) {
@@ -245,7 +246,7 @@ void MainWindow::addFiles() {
     }
 
     if (!filtered_filenames.isEmpty()) {
-        if (sql_insert_into(database, std::string(PRIMARY_KEY), filtered_filenames)) {
+        if (sql_add_paths(database, filtered_filenames)) {
             entries += filtered_filenames;
             entries.sort();
             model->setStringList(entries);
@@ -293,12 +294,10 @@ void MainWindow::importTags() {
     QFileDialog *fileDialog = new QFileDialog;
     QString filename = fileDialog->getOpenFileName(this, "Import Tags", "", "YAML (*.yaml *.yml)");
     if (!filename.isEmpty()) {
-        QSet<QString> columns = sql_get_columns(database);
         QSet<QString> paths = sql_get_paths(database);
         YAML::Node node = YAML::LoadFile(filename.toStdString().c_str());
         for (YAML::const_iterator it = node.begin(); it != node.end(); ++it) {
             QStringList filenames;
-            QStringList new_columns;
             QStringList tags;
             if (!paths.contains(it->first.as<std::string>().c_str())) {
                 std::cerr << it->first.as<std::string>() << " does not exist in database!" << std::endl;
@@ -310,23 +309,16 @@ void MainWindow::importTags() {
             case YAML::NodeType::Sequence:
                 for (size_t i = 0; i < value.size(); ++i) {
                     QString tag = sanitize_tags(it->second[i].as<std::string>()).c_str();
-                    if (!columns.contains(tag.toLower())) {
-                        columns.insert(tag.toLower());
-                        new_columns.append(tag.toLower());
-                    }
                     tags.append(tag);
                 }
                 break;
             default:
                 break;
             }
-            if (!new_columns.isEmpty()) {
-                sql_add_columns(database, std::string(PRIMARY_KEY), new_columns);
-            }
             if (settings->clearTags->isChecked()) {
-                sql_clear_tags(database, columns, filenames);
+                sql_clear_tags(database, filenames);
             }
-            sql_update_tags(database, std::string(PRIMARY_KEY), filenames, tags, true);
+            sql_add_tags(database, filenames, tags);
         }
     }
 }
@@ -361,11 +353,10 @@ void MainWindow::openFilesWith() {
     openWith->show();
 }
 
-
 void MainWindow::removeFiles() {
     QStringList filenames = getSelectedFiles(listView);
     if (!filenames.isEmpty()) {
-        if (sql_remove_paths(database, std::string(PRIMARY_KEY), filenames)) {
+        if (sql_remove_paths(database, filenames)) {
             for (int i = 0; i < filenames.size(); ++i) {
                 entries.removeOne(filenames.at(i));
             }
@@ -403,7 +394,6 @@ void MainWindow::updateApplication(bool update) {
 
 void MainWindow::updateEntries(const QString str) {
     QSet<QString> filtered_entries;
-    QSet<QString> columns;
     QStringList tags;
 
     if (searchNames->isChecked()) {
@@ -416,19 +406,8 @@ void MainWindow::updateEntries(const QString str) {
         goto done;
     }
 
-    columns = sql_get_columns(database);
     tags = splitTags(str.toStdString(), ',');
-    for (int i = 0; i < tags.size(); ++i) {
-        std::string tag = tags.at(i).toLower().toStdString();
-        if (tags.at(i)[0] == '-') {
-            tag = tags.at(i).mid(1).toLower().toStdString();
-        }
-        if (!columns.contains(tag.c_str()) && tags.at(i)[0] != '-') {
-            goto done;
-        }
-    }
-
-    filtered_entries = sql_update_entries(database, tags, columns);
+    filtered_entries = sql_update_entries(database, tags);
 
 done:
     QStringList filtered_list(filtered_entries.begin(), filtered_entries.end());
@@ -445,18 +424,12 @@ void MainWindow::updateTags(bool add) {
     QStringList filenames = getSelectedFiles(listView);
     QStringList tags = splitTags(tagEdit->text().toStdString(), ',');
 
-    QStringList new_columns;
-    QSet<QString> columns = sql_get_columns(database);
-    for (int i = 0; i < tags.size(); ++i) {
-        if (!columns.contains(tags[i].toLower())) {
-            new_columns.append(tags[i].toLower());
-        }
-    }
-    if (!columns.isEmpty()) {
-        sql_add_columns(database, std::string(PRIMARY_KEY), new_columns);
-    }
     if (!tags.isEmpty()) {
-        sql_update_tags(database, std::string(PRIMARY_KEY), filenames, tags, add);
+        if (add) {
+            sql_add_tags(database, filenames, tags);
+        } else {
+            sql_remove_tags(database, filenames, tags);
+        }
     }
     tagDialog->close();
 }

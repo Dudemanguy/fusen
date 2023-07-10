@@ -20,33 +20,20 @@
 #include "sql.h"
 #include "utils.h"
 
-static int col_callback(void *data, int argc, char **argv, char **azColName) {
-    QSet<QString> *columns = static_cast<QSet<QString> *>(data);
+static int path_callback(void *data, int argc, char **argv, char **azColName) {
+    QSet<QString> *paths = static_cast<QSet<QString> *>(data);
     for (int i = 0; i < argc; i++) {
-        if (strcmp(azColName[i], "name") == 0) {
-            columns->insert(argv[i]);
-        }
+        paths->insert(argv[i]);
     }
     return 0;
 }
 
-static int entry_callback(void *data, int argc, char **argv, char **azColName) {
-    QSet<QString> *entries = static_cast<QSet<QString> *>(data);
-    for (int i = 0; i < argc; i++) {
-        entries->insert(argv[i]);
-    }
-    return 0;
-}
-
-QStringList build_entries(sqlite3 *database) {
-    QSet<QString> entries;
-    std::string sql = std::string("SELECT ") + PRIMARY_KEY + std::string(" FROM ") + TABLE;
+static void sql_clear_duplicates(sqlite3 *database) {
     char *err;
-    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&entries), &err)) {
-        std::cerr << "Error while trying to read table: " << err << std::endl;
+    std::string sql = std::string("DELETE FROM master WHERE rowid NOT IN (select min(rowid) from master GROUP BY path, tag)");
+    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
+        std::cerr << "Error while clearing duplicate rows!: " << err << std::endl;
     }
-    QStringList list(entries.begin(), entries.end());
-    return list;
 }
 
 sqlite3 *connectDatabase() {
@@ -67,8 +54,9 @@ sqlite3 *connectDatabase() {
 
     if (create_table) {
         char *err;
-        std::string sql = std::string("CREATE TABLE ") + TABLE + std::string("(") + \
-                        PRIMARY_KEY + std::string(" VARCHAR(1024) PRIMARY KEY)");
+        std::string sql = std::string("CREATE TABLE master (") + \
+                        "'index' INTEGER, 'path' TEXT, 'tag' TEXT," + \
+                        "PRIMARY KEY('index' AUTOINCREMENT))";
         if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
             std::cerr << "Error while creating table: " << err << std::endl;
             exit(EXIT_FAILURE);
@@ -77,70 +65,32 @@ sqlite3 *connectDatabase() {
     return database;
 }
 
-void sql_add_columns(sqlite3 *database, std::string key, QStringList columns) {
+void sql_add_tags(sqlite3 *database, QStringList filenames, QStringList tags)
+{
     char *err;
-    // Has to be done one column at a time.
-    for (int i = 0; i < columns.size(); ++i) {
-        std::string sql = std::string("ALTER TABLE ") + TABLE + " ADD COLUMN " +
-                          "'" + columns.at(i).toStdString() + "' INTEGER";
-        if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-            std::cerr << "Error while adding columns: " << err << std::endl;
-        }
-    }
-}
-
-void sql_clear_tags(sqlite3 *database, QSet<QString> columns, QStringList filenames) {
-    char *err;
-    std::string sql = std::string("UPDATE ") + TABLE + " SET ";
-    // Don't clear primary key
-    std::string primary_key = std::string(PRIMARY_KEY);
-    columns.remove(PRIMARY_KEY);
-    for (auto i = columns.begin(), end = columns.end(); i != end; ++i) {
-        sql += "'" + (*i).toStdString() + "' = NULL,";
-    }
-    // Remove trailing comma
-    sql.pop_back();
-    sql += " WHERE ";
+    std::string sql = std::string("INSERT INTO master (path, tag) VALUES ");
     for (int i = 0; i < filenames.size(); ++i) {
-        QString filename = filenames[i].replace("\'", "\'\'");
-        sql += primary_key + " = '" + filenames[i].toStdString() + "' OR ";
-    }
-    sql.erase(sql.end() - 3, sql.end());
-    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-        std::cerr << "Error while clearing tags: " << err << std::endl;
-    }
-}
-
-QSet<QString> sql_get_columns(sqlite3 *database) {
-    QSet<QString> columns;
-    std::string sql = std::string("PRAGMA table_info (") + TABLE + std::string(")");
-    char *err;
-    if (sqlite3_exec(database, sql.c_str(), col_callback, static_cast<void *>(&columns), &err)) {
-        std::cerr << "Error while reading columns: " << err << std::endl;
-    }
-    return columns;
-}
-
-QSet<QString> sql_get_paths(sqlite3 *database) {
-    QSet<QString> paths;
-    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE;
-    char *err;
-    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&paths), &err)) {
-        std::cerr << "Error while reading paths: " << err << std::endl;
-    }
-    return paths;
-}
-
-bool sql_insert_into(sqlite3 *database, std::string key, QStringList values) {
-    std::string sql = std::string("INSERT INTO ") + TABLE + " (" + key + ") VALUES ";
-    for (int i = 0; i < values.size(); ++i) {
-        std::string str = values.at(i).toStdString();
-        for (size_t i = 0; i < str.length(); ++i) {
-            if (str[i] == '\'') {
-                str.insert(i, "'");
-                ++i;
+        std::string sql_query = sql + "('" + sanitize_path(filenames.at(i).toStdString()) + "','";
+        for (int j = 0; j < tags.size(); ++j) {
+             std::string sql_final = sql_query + tags.at(j).toStdString() + "')";
+            if (sqlite3_exec(database, sql_final.c_str(), NULL, 0, &err)) {
+                std::cerr << "Error while adding tags: " << err << std::endl;
             }
         }
+    }
+    sql_clear_duplicates(database);
+}
+
+void sql_clear_tags(sqlite3 *database, QStringList filenames) {
+    // Just remove from the database and then readd the paths.
+    sql_remove_paths(database, filenames);
+    sql_add_paths(database, filenames);
+}
+
+bool sql_add_paths(sqlite3 *database, QStringList paths) {
+    std::string sql = std::string("INSERT INTO master (path) VALUES ");
+    for (int i = 0; i < paths.size(); ++i) {
+        std::string str = sanitize_path(paths.at(i).toStdString());
         sql += "('" + str + "'),";
     }
     // Replace trailing comma
@@ -154,16 +104,20 @@ bool sql_insert_into(sqlite3 *database, std::string key, QStringList values) {
     return true;
 }
 
-bool sql_remove_paths(sqlite3 *database, std::string key, QStringList values) {
-    std::string sql = std::string("DELETE FROM ") + TABLE + " WHERE " + key + " IN (";
-    for (int i = 0; i < values.size(); ++i) {
-        std::string str = values.at(i).toStdString();
-        for (size_t i = 0; i < str.length(); ++i) {
-            if (str[i] == '\'') {
-                str.insert(i, "'");
-                ++i;
-            }
-        }
+QSet<QString> sql_get_paths(sqlite3 *database) {
+    QSet<QString> paths;
+    std::string sql = std::string("SELECT DISTINCT path FROM master");
+    char *err;
+    if (sqlite3_exec(database, sql.c_str(), path_callback, static_cast<void *>(&paths), &err)) {
+        std::cerr << "Error while reading paths: " << err << std::endl;
+    }
+    return paths;
+}
+
+bool sql_remove_paths(sqlite3 *database, QStringList paths) {
+    std::string sql = std::string("DELETE FROM master WHERE (path) IN (");
+    for (int i = 0; i < paths.size(); ++i) {
+        std::string str = sanitize_path(paths.at(i).toStdString());
         sql += "('" + str + "'),";
     }
     // Remove trailing comma
@@ -177,48 +131,38 @@ bool sql_remove_paths(sqlite3 *database, std::string key, QStringList values) {
     return true;
 }
 
-QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags, QSet<QString> columns) {
+void sql_remove_tags(sqlite3 *database, QStringList filenames, QStringList tags)
+{
     char *err;
-    QSet<QString> entries;
-    std::string sql = std::string("SELECT ") + PRIMARY_KEY + " FROM " + TABLE + " WHERE ";
-    for (int i = 0; i < tags.size(); ++i) {
-        std::string tag = tags.at(i).toStdString();
-        std::string include = " NOT ";
-        if (tags.at(i)[0] == '-') {
-            include = "";
-            tag = tags.at(i).mid(1).toStdString();
-            if (!columns.contains(tag.c_str())) {
-                continue;
+    std::string sql = std::string("DELETE FROM master WHERE path = '");
+    for (int i = 0; i < filenames.size(); ++i) {
+        std::string sql_query = sql + sanitize_path(filenames.at(i).toStdString()) + "' AND tag = '";
+        for (int j = 0; j < tags.size(); ++j) {
+            std::string sql_final = sql_query + tags.at(j).toStdString() + "'";
+            if (sqlite3_exec(database, sql_final.c_str(), NULL, 0, &err)) {
+                std::cerr << "Error while adding tags: " << err << std::endl;
             }
         }
-        sql += "\"" + tag + "\" IS" + include + "NULL AND ";
     }
-    sql.erase(sql.end() - 5, sql.end());
-    if (sqlite3_exec(database, sql.c_str(), entry_callback, static_cast<void *>(&entries), &err)) {
+}
+
+QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags) {
+    char *err;
+    QSet<QString> entries;
+    std::string sql = std::string("SELECT DISTINCT path FROM master ");
+    for (int i = 0; i < tags.size(); ++i) {
+        std::string tag = tags.at(i).toStdString();
+        bool exclude = false;
+        if (tags.at(i)[0] == '-') {
+            tag = tags.at(i).mid(1).toStdString();
+            exclude = true;
+        }
+        sql += exclude ? "EXCEPT " : "INTERSECT ";
+        sql += "SELECT DISTINCT path FROM master WHERE tag = '" + tag + "' ";
+    }
+    if (sqlite3_exec(database, sql.c_str(), path_callback, static_cast<void *>(&entries), &err)) {
         std::cerr << "Error while reading entries: " << err << std::endl;
         entries.clear();
     }
     return entries;
-}
-
-void sql_update_tags(sqlite3 *database, std::string key,
-                     QStringList filenames, QStringList tags, bool add)
-{
-    char *err;
-    std::string value = add ? "1" : "NULL";
-    std::string sql = std::string("UPDATE ") + TABLE + " SET ";
-    for (int i = 0; i < tags.size(); ++i) {
-        sql += "'" + tags.at(i).toStdString() + "' = " + value + ", ";
-    }
-    // Remove trailing comma
-    sql.erase(sql.end() - 2, sql.end());
-    sql += " WHERE ";
-    for (int i = 0; i < filenames.size(); ++i) {
-        QString filename = filenames[i].replace("\'", "\'\'");
-        sql += key + " = '" + filename.toStdString() + "' OR ";
-    }
-    sql.erase(sql.end() - 3, sql.end());
-    if (sqlite3_exec(database, sql.c_str(), NULL, 0, &err)) {
-        std::cerr << "Error while adding tags: " << err << std::endl;
-    }
 }

@@ -67,10 +67,20 @@ fs::path getUserFile(const char *type) {
     return file;
 }
 
+std::string sanitize_path(std::string str) {
+    for (size_t i = 0; i < str.length(); ++i) {
+        if (str[i] == '\'') {
+            str.insert(i, "'");
+            ++i;
+        }
+    }
+    return str;
+}
+
 bool scanDirectories(sqlite3 *database, QString directory, QSet<QString> existing_files) {
     QStringList filenames = getNewDirectoryFiles(directory, existing_files, true);
     if (!filenames.isEmpty()) {
-        return sql_insert_into(database, std::string(PRIMARY_KEY), filenames);
+        return sql_add_paths(database, filenames);
     }
     return true;
 }

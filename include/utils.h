@@ -32,6 +32,7 @@ namespace fs = std::filesystem;
 
 fs::path getUserFile(const char *type);
 QStringList getNewDirectoryFiles(QString directory, QSet<QString> existing_files, bool recursive);
+std::string sanitize_path(std::string str);
 bool scanDirectories(sqlite3 *database, QString directory, QSet<QString> existing_files);
 
 #endif
