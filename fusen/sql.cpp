@@ -14,6 +14,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <fstream>
 #include <iostream>
 #include <ostream>
 
@@ -165,4 +166,46 @@ QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags) {
         entries.clear();
     }
     return entries;
+}
+
+void sql_write_database_contents(sqlite3 *database, std::string filename) {
+    YAML::Emitter yaml;
+    sqlite3_stmt *stmt;
+    std::string sql = std::string("SELECT DISTINCT path,tag FROM master GROUP BY path,tag");
+    int rc = sqlite3_prepare_v2(database, sql.c_str(), -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Error while getting database contents: " << sqlite3_errmsg(database) << std::endl;
+        return;
+    }
+
+    yaml << YAML::BeginMap;
+    int index = 0;
+    while (true) {
+        rc = sqlite3_step(stmt);
+        if (rc == SQLITE_DONE) {
+            break;
+        }
+        if (rc != SQLITE_ROW) {
+            std::cerr << "Error while getting database contents: " << sqlite3_errmsg(database) << std::endl;
+            break;
+        }
+        const char *path = (const char *)sqlite3_column_text(stmt, 0);
+        if (sqlite3_column_type(stmt, 1) == SQLITE_NULL) {
+            if (index != 0) {
+                yaml << YAML::EndSeq;
+            }
+            yaml << YAML::Key << path;
+            yaml << YAML::Value << YAML::BeginSeq;
+        } else {
+            yaml << (const char *)sqlite3_column_text(stmt, 1);
+        }
+        ++index;
+    }
+    yaml << YAML::EndSeq << YAML::EndMap;
+    sqlite3_finalize(stmt);
+
+    fs::path file = fs::path(filename);
+    std::ofstream fout(file.string().c_str());
+    fout << yaml.c_str();
+    fout.close();
 }

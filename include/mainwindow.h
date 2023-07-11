@@ -50,6 +50,7 @@ class MainWindow : public QMainWindow {
         void closeEvent(QCloseEvent *event);
         void copyPath();
         void defaultApplicationOpen();
+        void exportTags();
         void importTags();
         void openFiles(bool defaultApplication);
         void openFilesWith();

@@ -20,16 +20,17 @@
 #include <QSet>
 #include <QStringList>
 #include <sqlite3.h>
+#include <yaml-cpp/yaml.h>
 
 sqlite3 *connectDatabase();
 void sql_add_columns(sqlite3 *database, std::string key, QStringList columns);
 bool sql_add_paths(sqlite3 *database, QStringList paths);
 void sql_add_tags(sqlite3 *database, QStringList filenames, QStringList tags);
 void sql_clear_tags(sqlite3 *database, QStringList filenames);
-QSet<QString> sql_get_columns(sqlite3 *database);
 QSet<QString> sql_get_paths(sqlite3 *database);
 bool sql_remove_paths(sqlite3 *database, QStringList paths);
 void sql_remove_tags(sqlite3 *database, QStringList filenames, QStringList tags);
 QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags);
+void sql_write_database_contents(sqlite3 *database, std::string filename);
 
 #endif

@@ -190,6 +190,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QPushButton *importTags = new QPushButton("Import", this);
     connect(importTags, &QPushButton::released, this, &MainWindow::importTags);
 
+    QPushButton *exportTags = new QPushButton("Export", this);
+    connect(exportTags, &QPushButton::released, this, &MainWindow::exportTags);
+
     listView = new QListView(this);
     listView->setModel(model);
     listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -219,7 +222,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     mainLayout->addWidget(searchBox, 0, 0, 1, 1);
     mainLayout->addWidget(searchNames, 0, 1, Qt::AlignLeft);
     mainLayout->addWidget(importTags, 0, 2, Qt::AlignLeft);
-    mainLayout->addWidget(listView, 1, 0, 1, 3);
+    mainLayout->addWidget(exportTags, 0, 3, Qt::AlignLeft);
+    mainLayout->addWidget(listView, 1, 0, 1, 4);
 }
 
 void MainWindow::addDirectory(bool recursive) {
@@ -290,19 +294,22 @@ void MainWindow::defaultApplicationOpen() {
     defaultOpen->show();
 }
 
+void MainWindow::exportTags() {
+    QFileDialog *fileDialog = new QFileDialog;
+    QString filename = fileDialog->getSaveFileName(this, "Export Tags", "database.yaml", "YAML (*.yaml *.yml)");
+    if (!filename.isEmpty()) {
+        sql_write_database_contents(database, filename.toStdString());
+    }
+}
+
 void MainWindow::importTags() {
     QFileDialog *fileDialog = new QFileDialog;
     QString filename = fileDialog->getOpenFileName(this, "Import Tags", "", "YAML (*.yaml *.yml)");
     if (!filename.isEmpty()) {
-        QSet<QString> paths = sql_get_paths(database);
         YAML::Node node = YAML::LoadFile(filename.toStdString().c_str());
         for (YAML::const_iterator it = node.begin(); it != node.end(); ++it) {
             QStringList filenames;
             QStringList tags;
-            if (!paths.contains(it->first.as<std::string>().c_str())) {
-                std::cerr << it->first.as<std::string>() << " does not exist in database!" << std::endl;
-                continue;
-            }
             filenames.append(it->first.as<std::string>().c_str());
             YAML::Node value = it->second;
             switch (value.Type()) {
@@ -318,7 +325,12 @@ void MainWindow::importTags() {
             if (settings->clearTags->isChecked()) {
                 sql_clear_tags(database, filenames);
             }
-            sql_add_tags(database, filenames, tags);
+            // If tag length is 0, add the path instead.
+            if (tags.size() == 0) {
+                sql_add_paths(database, filenames);
+            } else {
+                sql_add_tags(database, filenames, tags);
+            }
         }
     }
 }
