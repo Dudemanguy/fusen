@@ -26,7 +26,9 @@ to `_` internally for simplicity. That means that, in practice, `foo bar` and `f
 ## Filtering
 In the search box at, tags can be searched for matches and update the list of entries. Multiple tags are
 comma-delineated. Additionally, prepending the tag with a `-` character performs an exclusion operation instead.
-In other words, `-foo` would return all entries that are *not* tagged with `foo`.
+In other words, `-foo` would return all entries that are *not* tagged with `foo`. Checking the "Exact Tag Match" box
+will search for strictly only exact matches for tags. Leaving it unchecked will search both the path name for partial
+matches as well as tags for partial matches.
 
 ## Importing Tags
 You can mass import tags for simplicity. fusen accepts files in yaml that are formatted as shown below:

@@ -147,7 +147,7 @@ void sql_remove_tags(sqlite3 *database, QStringList filenames, QStringList tags)
     }
 }
 
-QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags) {
+QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags, bool exact) {
     char *err;
     QSet<QString> entries;
     std::string sql = std::string("SELECT DISTINCT path FROM master ");
@@ -159,7 +159,11 @@ QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags) {
             exclude = true;
         }
         sql += exclude ? "EXCEPT " : "INTERSECT ";
-        sql += "SELECT DISTINCT path FROM master WHERE tag = '" + tag + "' ";
+        if (exact) {
+            sql += "SELECT DISTINCT path FROM master WHERE tag = '" + tag + "' ";
+        } else {
+            sql += "SELECT DISTINCT path FROM master WHERE tag LIKE '%" + tag + "%' ";
+        }
     }
     if (sqlite3_exec(database, sql.c_str(), path_callback, static_cast<void *>(&entries), &err)) {
         std::cerr << "Error while reading entries: " << err << std::endl;

@@ -30,7 +30,7 @@ void sql_clear_tags(sqlite3 *database, QStringList filenames);
 QSet<QString> sql_get_paths(sqlite3 *database);
 bool sql_remove_paths(sqlite3 *database, QStringList paths);
 void sql_remove_tags(sqlite3 *database, QStringList filenames, QStringList tags);
-QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags);
+QSet<QString> sql_update_entries(sqlite3 *database, QStringList tags, bool exact);
 void sql_write_database_contents(sqlite3 *database, std::string filename);
 
 #endif

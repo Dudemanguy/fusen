@@ -182,10 +182,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     searchBox = new QLineEdit(this);
     searchBox->setClearButtonEnabled(true);
     searchBox->setPlaceholderText(tr("Search"));
-    connect(searchBox, &QLineEdit::textChanged, this, &MainWindow::updateEntries);
+    connect(searchBox, &QLineEdit::textChanged, this, &MainWindow::buildEntries);
 
-    searchNames = new QCheckBox("Filter by name", this);
-    connect(searchNames, &QCheckBox::stateChanged, this, &MainWindow::updateNameCheck);
+    exactMatch = new QCheckBox("Exact Tag Match", this);
+    connect(exactMatch, &QCheckBox::stateChanged, this, &MainWindow::updateEntries);
 
     QPushButton *importTags = new QPushButton("Import", this);
     connect(importTags, &QPushButton::released, this, &MainWindow::importTags);
@@ -220,7 +220,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     QGridLayout *mainLayout = new QGridLayout(centralWidget);
     mainLayout->addWidget(searchBox, 0, 0, 1, 1);
-    mainLayout->addWidget(searchNames, 0, 1, Qt::AlignLeft);
+    mainLayout->addWidget(exactMatch, 0, 1, Qt::AlignLeft);
     mainLayout->addWidget(importTags, 0, 2, Qt::AlignLeft);
     mainLayout->addWidget(exportTags, 0, 3, Qt::AlignLeft);
     mainLayout->addWidget(listView, 1, 0, 1, 4);
@@ -266,6 +266,33 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     sqlite3_close(database);
     saveSettings(settings);
     delete settings;
+}
+
+void MainWindow::buildEntries(const QString str) {
+    QSet<QString> path_entries;
+    QSet<QString> tag_entries;
+    bool exact_match = exactMatch->isChecked();
+    QStringList tags = splitTags(str.toStdString(), ',');
+
+    // If not exact check the path name as well as the actual tags.
+    if (!exact_match) {
+        entries = build_entries(database);
+        for (int i = 0; i < entries.size(); ++i) {
+            for (int j = 0; j < tags.size(); ++j) {
+                if (entries.at(i).toLower().contains(tags.at(j).toLower())) {
+                    path_entries.insert(entries.at(i));
+                }
+            }
+        }
+    }
+
+    tag_entries = sql_update_entries(database, tags, exact_match);
+    QSet<QString> filtered_entries = path_entries + tag_entries;
+
+    QStringList filtered_list(filtered_entries.begin(), filtered_entries.end());
+    entries = filtered_list;
+    entries.sort();
+    model->setStringList(entries);
 }
 
 void MainWindow::copyPath() {
@@ -404,32 +431,8 @@ void MainWindow::updateApplication(bool update) {
     defaultOpen->close();
 }
 
-void MainWindow::updateEntries(const QString str) {
-    QSet<QString> filtered_entries;
-    QStringList tags;
-
-    if (searchNames->isChecked()) {
-        entries = build_entries(database);
-        for (int i = 0; i < entries.size(); ++i) {
-            if (entries.at(i).toLower().contains(str.toLower())) {
-                filtered_entries.insert(entries.at(i));
-            }
-        }
-        goto done;
-    }
-
-    tags = splitTags(str.toStdString(), ',');
-    filtered_entries = sql_update_entries(database, tags);
-
-done:
-    QStringList filtered_list(filtered_entries.begin(), filtered_entries.end());
-    entries = filtered_list;
-    entries.sort();
-    model->setStringList(entries);
-}
-
-void MainWindow::updateNameCheck(bool checked) {
-    MainWindow::updateEntries(searchBox->text());
+void MainWindow::updateEntries(bool checked) {
+    MainWindow::buildEntries(searchBox->text());
 }
 
 void MainWindow::updateTags(bool add) {

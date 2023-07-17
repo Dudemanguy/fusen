@@ -34,12 +34,12 @@ class MainWindow : public QMainWindow {
         QDialog *defaultOpen;
         QLineEdit *defaultOpenWith;
         QStringList entries;
+        QCheckBox *exactMatch;
         QListView *listView;
         QStringListModel *model;
         QDialog *openWith;
         QLineEdit *openWithEntry;
         QLineEdit *searchBox;
-        QCheckBox *searchNames;
         mainSettings *settings;
         QDialog *tagDialog;
         QLineEdit *tagEdit;
@@ -47,6 +47,7 @@ class MainWindow : public QMainWindow {
         void addDirectory(bool recursive);
         void addFiles();
         void addScanDirs();
+        void buildEntries(const QString str);
         void closeEvent(QCloseEvent *event);
         void copyPath();
         void defaultApplicationOpen();
@@ -57,8 +58,7 @@ class MainWindow : public QMainWindow {
         void removeFiles();
         void tagFiles();
         void updateApplication(bool update);
-        void updateEntries(const QString str);
-        void updateNameCheck(bool checked);
+        void updateEntries(bool checked);
         void updateTags(bool add);
 };
 
