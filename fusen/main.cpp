@@ -75,6 +75,9 @@ static void initializeSettings(sqlite3 *database, mainSettings *settings) {
     } else {
         settings->defaultApplicationPath = "mpv";
     }
+    if (yaml["deleteFileAfterImport"]) {
+        settings->deleteImport->setChecked(yaml["deleteFileAfterImport"].as<bool>());
+    }
     if (yaml["scanDirectories"] && yaml["scanDirectories"].IsSequence()) {
         for (size_t i = 0; i < yaml["scanDirectories"].size(); ++i) {
             settings->scanDirs.append(yaml["scanDirectories"][i].as<std::string>().c_str());
@@ -112,6 +115,7 @@ static void saveSettings(mainSettings *settings) {
     YAML::Node yaml;
     yaml["clearTagsOnImport"] = settings->clearTags->isChecked();
     yaml["defaultApplicationPath"] = settings->defaultApplicationPath.c_str();
+    yaml["deleteFileAfterImport"] = settings->deleteImport->isChecked();
     for (int i = 0; i < settings->scanDirs.size(); ++i) {
         yaml["scanDirectories"][i] = settings->scanDirs.at(i).toStdString().c_str();
     }
@@ -160,6 +164,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     clearTags->setCheckable(true);
     settingsMenu->addAction(clearTags);
     settings->clearTags = clearTags;
+
+    deleteImport = new QAction(tr("&Delete File after Import"), this);
+    deleteImport->setCheckable(true);
+    settingsMenu->addAction(deleteImport);
+    settings->deleteImport = deleteImport;
 
     QAction *defaultOpen = new QAction(tr("&Default Application to Open Files"), this);
     connect(defaultOpen, &QAction::triggered, this, &MainWindow::defaultApplicationOpen);
@@ -358,6 +367,9 @@ void MainWindow::importTags() {
             } else {
                 sql_add_tags(database, filenames, tags);
             }
+        }
+        if (settings->deleteImport->isChecked()) {
+            fs::remove(filename.toStdString());
         }
     }
 }

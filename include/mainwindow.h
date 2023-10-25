@@ -33,6 +33,7 @@ class MainWindow : public QMainWindow {
         sqlite3 *database;
         QDialog *defaultOpen;
         QLineEdit *defaultOpenWith;
+        QAction *deleteImport;
         QStringList entries;
         QCheckBox *exactMatch;
         QListView *listView;

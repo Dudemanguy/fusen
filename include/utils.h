@@ -24,6 +24,7 @@
 
 struct mainSettings {
     QAction *clearTags;
+    QAction *deleteImport;
     std::string defaultApplicationPath;
     QStringList scanDirs;
 };
